@@ -26,8 +26,14 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Net.Http;
+using System.Text;
+using Newtonsoft.Json;
 
 namespace CenterCLR.CustomLINQProviderDemo
 {
@@ -82,7 +88,7 @@ namespace CenterCLR.CustomLINQProviderDemo
 		}
 	}
 
-	public sealed class SelectSqlGenerator<TResultModel, TModel>
+	public sealed class SelectSqlGenerator<TResultModel, TModel> : IEnumerable<TResultModel>
 	{
 		private readonly Expression<Func<TModel, bool>> filterExpression_;
 		private readonly Expression<Func<TModel, TResultModel>> selectorExpression_;
@@ -105,6 +111,31 @@ namespace CenterCLR.CustomLINQProviderDemo
 				",",
 				newExpression.Arguments.Select(
 					argumentExpression => ((MemberExpression)argumentExpression).Member.Name));
+		}
+
+		public IEnumerator<TResultModel> GetEnumerator()
+		{
+			using (var httpClient = new HttpClient())
+			{
+				// This is very wrong demonstration query :)
+				var url = new Uri("http://api.example.com/v1?rest=" + this.ToString());
+
+				using (var stream = httpClient.GetStreamAsync(url).Result)
+				{
+					var tr = new StreamReader(stream, Encoding.UTF8);
+					var jtr = new JsonTextReader(tr);
+					var js = new JsonSerializer();
+
+					IEnumerable<TResultModel> results = js.Deserialize<TResultModel[]>(jtr);
+
+					return results.GetEnumerator();
+				}
+			}
+		}
+
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			return this.GetEnumerator();
 		}
 
 		public override string ToString()
@@ -134,6 +165,11 @@ namespace CenterCLR.CustomLINQProviderDemo
 				select new { oreore.ID, oreore.Name };
 
 			Console.WriteLine(query);
+
+			foreach (var value in query)
+			{
+				Console.WriteLine(string.Format("{0}: {1}", value.ID, value.Name));
+			}
 		}
 	}
 }
